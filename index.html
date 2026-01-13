@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contador de Clases y Faltas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        
+        .subject-card {
+            transition: all 0.3s ease;
+        }
+        .subject-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Modal Styles */
+        .modal {
+            transition: opacity 0.25s ease;
+        }
+        body.modal-active {
+            overflow-y: hidden;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-100 to-blue-50 min-h-screen text-slate-800 p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <!-- Header Section -->
+        <header class="mb-8 text-center">
+            <div class="inline-block p-2 px-4 rounded-full bg-blue-100 text-blue-700 text-sm font-bold mb-4">
+                <i class="fas fa-calendar-alt mr-2"></i>Fin de curso: 11 de Marzo de 2026
+            </div>
+            <h1 id="dynamic-title" class="text-2xl md:text-5xl font-extrabold text-slate-900 mb-2 leading-tight">
+                Cargando fecha...
+            </h1>
+            <p class="text-slate-500 text-sm md:text-lg">Conteo automático excluyendo festivos (2 Feb)</p>
+        </header>
+
+        <!-- Totals & Actions Summary -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="glass-card p-4 rounded-2xl border-l-4 border-blue-500">
+                <div class="text-slate-400 text-xs font-bold uppercase tracking-wider">Total Horas Restantes</div>
+                <div id="total-hours" class="text-3xl font-bold text-slate-800">0</div>
+            </div>
+            
+            <div class="glass-card p-4 rounded-2xl border-l-4 border-indigo-500">
+                <div class="text-slate-400 text-xs font-bold uppercase tracking-wider">Días Lectivos</div>
+                <div id="total-days" class="text-3xl font-bold text-slate-800">0</div>
+            </div>
+
+            <!-- Action Card (Ánimo / Faltas) -->
+            <div class="md:col-span-2 glass-card p-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex flex-col sm:flex-row items-center justify-between shadow-lg transform transition hover:scale-[1.01]">
+                <div class="mb-3 sm:mb-0">
+                    <div class="font-bold text-lg"><i class="fas fa-check-circle mr-2"></i>Control de Asistencia</div>
+                    <div class="text-blue-100 text-sm">Gestiona tus faltas y revisa los límites.</div>
+                </div>
+                <button onclick="toggleModal('modal-faltas')" class="px-6 py-2 bg-white text-blue-600 font-bold rounded-full hover:bg-blue-50 transition shadow-md whitespace-nowrap">
+                    Gestionar Faltas
+                </button>
+            </div>
+        </div>
+
+        <!-- Grid of Subjects -->
+        <div id="subjects-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Cards injected by JS -->
+        </div>
+
+        <footer class="mt-12 text-center text-slate-400 text-sm">
+            <p>Actualizado automáticamente a las 15:00 cada día.</p>
+        </footer>
+    </div>
+
+    <!-- MODAL FALTAS -->
+    <div id="modal-faltas" class="modal opacity-0 pointer-events-none fixed w-full h-full top-0 left-0 flex items-center justify-center z-50">
+        <div class="modal-overlay absolute w-full h-full bg-slate-900 opacity-50" onclick="toggleModal('modal-faltas')"></div>
+        
+        <div class="modal-container bg-white w-11/12 md:max-w-2xl mx-auto rounded-2xl shadow-2xl z-50 overflow-y-auto max-h-[90vh]">
+            
+            <div class="modal-content py-4 text-left px-6">
+                <!-- Title -->
+                <div class="flex justify-between items-center pb-3 border-b border-slate-100">
+                    <p class="text-2xl font-bold text-slate-800">Mis Faltas</p>
+                    <div class="cursor-pointer z-50" onclick="toggleModal('modal-faltas')">
+                        <i class="fas fa-times text-slate-500 hover:text-red-500 text-xl"></i>
+                    </div>
+                </div>
+
+                <!-- Limits Disclaimer Toggle -->
+                <div class="my-4">
+                    <button onclick="toggleLimitsInfo()" class="text-xs font-bold text-blue-600 hover:underline focus:outline-none">
+                        <i class="fas fa-info-circle mr-1"></i> Ver límites teóricos utilizados
+                    </button>
+                    <div id="limits-info" class="hidden mt-2 p-3 bg-blue-50 rounded-lg text-xs text-blue-800 border border-blue-100">
+                        <p class="font-bold mb-1">Límites de referencia:</p>
+                        <ul class="grid grid-cols-2 gap-x-4 gap-y-1 list-disc pl-4 mb-2">
+                            <li>DEMC (Diseño): 28</li>
+                            <li>Inglés: 11</li>
+                            <li>IPE: 11</li>
+                            <li>Trabajo de Campo: 17</li>
+                            <li>Lanzamiento: 17</li>
+                            <li>RRPP: 23</li>
+                            <li>Medios: 23</li>
+                            <li>Atención Cliente: 17</li>
+                            <li>Sostenibilidad (Opt): 11</li>
+                            <li>Diseño Gráfico: --</li>
+                        </ul>
+                        <p class="italic opacity-75 border-t border-blue-200 pt-1 mt-1">
+                            *IMPORTANTE: Los límites aquí mostrados son aproximados y basados en la información proporcionada. 
+                            Pueden no ser precisos. Para información oficial, consulta siempre con jefatura de estudios.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Inputs List -->
+                <div class="space-y-3" id="absences-list">
+                    <!-- Dynamic Rows -->
+                </div>
+
+                <!-- Footer -->
+                <div class="flex justify-end pt-4 mt-4 border-t border-slate-100">
+                    <button onclick="toggleModal('modal-faltas')" class="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-lg">
+                        Guardar y Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURACIÓN ---
+        const END_DATE = new Date(2026, 2, 11); 
+        const HOLIDAYS = ["2026-02-02"]; 
+        
+        const SCHEDULE = {
+            1: { "DEMC": 1, "TRABAJO DE CAMPO": 2, "DISEÑO": 2, "INGLÉS": 1 },
+            2: { "DEMC": 2, "MEDIOS": 2, "RRPP": 2 },
+            3: { "DEMC": 2, "MEDIOS": 2, "ATENCIÓN AL CLIENTE": 1, "LANZAMIENTO": 1 },
+            4: { "TRABAJO DE CAMPO": 1, "ATENCIÓN AL CLIENTE": 2, "INGLÉS": 1, "IPE": 2 },
+            5: { "RRPP": 2, "LANZAMIENTO": 2, "SOSTENIBILIDAD": 1 }
+        };
+
+        // Mapeo de límites proporcionados por el usuario
+        // Nota: Asignamos "Diseño 28" a DEMC por ser la carga horaria mayor.
+        // Diseño Gráfico se queda sin límite explícito en la lista (null).
+        const LIMITS = {
+            "DEMC": 28, 
+            "MEDIOS": 23,
+            "RRPP": 23,
+            "TRABAJO DE CAMPO": 17,
+            "ATENCIÓN AL CLIENTE": 17,
+            "LANZAMIENTO": 17,
+            "DISEÑO": null, // Diseño gráfico
+            "INGLÉS": 11,
+            "IPE": 11,
+            "SOSTENIBILIDAD": 11
+        };
+
+        const SUBJECT_CONFIG = {
+            "DEMC": { color: "text-blue-600", bg: "bg-blue-50", icon: "fa-pencil-ruler", name: "Diseño y Elaboración (DEMC)" },
+            "MEDIOS": { color: "text-purple-600", bg: "bg-purple-50", icon: "fa-bullhorn", name: "Medios y Soportes" },
+            "RRPP": { color: "text-pink-600", bg: "bg-pink-50", icon: "fa-users", name: "Relaciones Públicas" },
+            "TRABAJO DE CAMPO": { color: "text-green-600", bg: "bg-green-50", icon: "fa-search-location", name: "Trabajo de Campo" },
+            "ATENCIÓN AL CLIENTE": { color: "text-orange-600", bg: "bg-orange-50", icon: "fa-headset", name: "Atención al Cliente" },
+            "LANZAMIENTO": { color: "text-red-600", bg: "bg-red-50", icon: "fa-rocket", name: "Lanzamiento Prod." },
+            "DISEÑO": { color: "text-teal-600", bg: "bg-teal-50", icon: "fa-palette", name: "Diseño Gráfico Apl." },
+            "INGLÉS": { color: "text-indigo-600", bg: "bg-indigo-50", icon: "fa-language", name: "Inglés Técnico" },
+            "IPE": { color: "text-yellow-600", bg: "bg-yellow-50", icon: "fa-briefcase", name: "Itinerario (IPE)" },
+            "SOSTENIBILIDAD": { color: "text-emerald-600", bg: "bg-emerald-50", icon: "fa-leaf", name: "Sostenibilidad" }
+        };
+
+        const STORAGE_KEY = 'user_absences_v1';
+        let userAbsences = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+
+        // --- LÓGICA ---
+
+        function formatDate(date) {
+            const options = { day: 'numeric', month: 'long' };
+            return date.toLocaleDateString('es-ES', options);
+        }
+
+        function formatISODate(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        function calculateRemainingHours() {
+            const now = new Date();
+            let startDate = new Date(now);
+            
+            if (now.getHours() >= 15) {
+                startDate.setDate(startDate.getDate() + 1);
+            }
+            startDate.setHours(0, 0, 0, 0);
+
+            document.getElementById('dynamic-title').innerText = 
+                `Horas de clase a partir del ${formatDate(startDate)}`;
+
+            let totals = {
+                "DEMC": 0, "MEDIOS": 0, "RRPP": 0, "TRABAJO DE CAMPO": 0,
+                "ATENCIÓN AL CLIENTE": 0, "LANZAMIENTO": 0, "DISEÑO": 0,
+                "INGLÉS": 0, "IPE": 0, "SOSTENIBILIDAD": 0
+            };
+
+            let remainingDays = 0;
+            let currentIterator = new Date(startDate);
+            let totalHoursSum = 0;
+
+            while (currentIterator <= END_DATE) {
+                const dayOfWeek = currentIterator.getDay();
+                const isoDate = formatISODate(currentIterator);
+
+                if (dayOfWeek !== 0 && dayOfWeek !== 6 && !HOLIDAYS.includes(isoDate)) {
+                    remainingDays++;
+                    const todaysClasses = SCHEDULE[dayOfWeek];
+                    
+                    if (todaysClasses) {
+                        for (const [subject, hours] of Object.entries(todaysClasses)) {
+                            if (totals[subject] !== undefined) {
+                                totals[subject] += hours;
+                                totalHoursSum += hours;
+                            }
+                        }
+                    }
+                }
+                currentIterator.setDate(currentIterator.getDate() + 1);
+            }
+
+            return { totals, remainingDays, totalHoursSum };
+        }
+
+        function saveAbsence(subject, value) {
+            userAbsences[subject] = parseInt(value) || 0;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(userAbsences));
+            renderAbsencesModalList(); // Actualizar colores en tiempo real
+        }
+
+        function getAbsenceStatus(subject, currentAbsences) {
+            const limit = LIMITS[subject];
+            if (limit === null || limit === undefined) return { text: "Sin límite definido", color: "text-gray-400", bg: "bg-gray-100" };
+
+            const remaining = limit - currentAbsences;
+            
+            if (remaining < 0) {
+                return { text: `¡Te has pasado por ${Math.abs(remaining)}h!`, color: "text-red-600", bg: "bg-red-100", icon: "fa-exclamation-triangle" };
+            } else if (remaining <= 5) {
+                return { text: `Cuidado: quedan ${remaining}h`, color: "text-orange-600", bg: "bg-orange-100", icon: "fa-exclamation-circle" };
+            } else {
+                return { text: `Te quedan ${remaining}h`, color: "text-green-600", bg: "bg-green-100", icon: "fa-check-circle" };
+            }
+        }
+
+        function renderAbsencesModalList() {
+            const list = document.getElementById('absences-list');
+            list.innerHTML = '';
+            
+            const orderedKeys = Object.keys(SUBJECT_CONFIG);
+
+            orderedKeys.forEach(subject => {
+                const current = userAbsences[subject] || 0;
+                const status = getAbsenceStatus(subject, current);
+                const config = SUBJECT_CONFIG[subject];
+
+                const row = document.createElement('div');
+                row.className = "flex items-center justify-between bg-slate-50 p-3 rounded-lg";
+                row.innerHTML = `
+                    <div class="flex-1">
+                        <div class="font-bold text-sm text-slate-700">${config.name}</div>
+                        <div class="text-xs ${status.color} font-bold flex items-center mt-1">
+                            ${status.icon ? `<i class="fas ${status.icon} mr-1"></i>` : ''}
+                            ${status.text}
+                        </div>
+                    </div>
+                    <div class="flex items-center">
+                        <input type="number" min="0" 
+                            class="w-16 p-2 border border-slate-300 rounded text-center font-bold text-slate-700 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                            value="${current}" 
+                            onchange="saveAbsence('${subject}', this.value)"
+                            onkeyup="saveAbsence('${subject}', this.value)"
+                        >
+                        <span class="ml-2 text-xs text-slate-400 font-bold">hrs</span>
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+        }
+
+        function toggleModal(modalID) {
+            document.getElementById(modalID).classList.toggle("opacity-0");
+            document.getElementById(modalID).classList.toggle("pointer-events-none");
+            document.body.classList.toggle("modal-active");
+            if (!document.getElementById(modalID).classList.contains("opacity-0")) {
+                renderAbsencesModalList();
+            } else {
+                render(); // Re-render main grid to update any absence indicators if we added them there later
+            }
+        }
+
+        function toggleLimitsInfo() {
+            document.getElementById('limits-info').classList.toggle('hidden');
+        }
+
+        function render() {
+            const { totals, remainingDays, totalHoursSum } = calculateRemainingHours();
+            
+            document.getElementById('total-hours').innerText = totalHoursSum;
+            document.getElementById('total-days').innerText = remainingDays;
+
+            const grid = document.getElementById('subjects-grid');
+            grid.innerHTML = '';
+
+            const orderedKeys = [
+                "DEMC", "MEDIOS", "RRPP", "TRABAJO DE CAMPO", 
+                "ATENCIÓN AL CLIENTE", "LANZAMIENTO", "DISEÑO", 
+                "INGLÉS", "IPE", "SOSTENIBILIDAD"
+            ];
+
+            orderedKeys.forEach(subject => {
+                const hours = totals[subject];
+                const config = SUBJECT_CONFIG[subject];
+                
+                const card = document.createElement('div');
+                card.className = "glass-card p-6 rounded-2xl subject-card flex items-center justify-between";
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center mb-2">
+                            <div class="w-8 h-8 rounded-full ${config.bg} ${config.color} flex items-center justify-center mr-3">
+                                <i class="fas ${config.icon}"></i>
+                            </div>
+                            <h3 class="font-bold text-xs md:text-sm text-slate-500 uppercase tracking-wide truncate max-w-[150px]">${subject}</h3>
+                        </div>
+                        <div class="text-4xl font-extrabold text-slate-800 ml-1">
+                            ${hours} <span class="text-lg font-medium text-slate-400">hrs</span>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        render();
+        setInterval(render, 60000);
+
+    </script>
+</body>
+</html>

@@ -64,7 +64,7 @@
             <div class="md:col-span-2 glass-card p-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex flex-col sm:flex-row items-center justify-between shadow-lg transform transition hover:scale-[1.01]">
                 <div class="mb-3 sm:mb-0">
                     <div class="font-bold text-lg"><i class="fas fa-check-circle mr-2"></i>Control de Asistencia</div>
-                    <div class="text-blue-100 text-sm">Gestiona tus faltas y revisa los límites.</div>
+                    <div class="text-blue-100 text-sm">Simula si puedes faltar a todo lo que queda.</div>
                 </div>
                 <button onclick="toggleModal('modal-faltas')" class="px-6 py-2 bg-white text-blue-600 font-bold rounded-full hover:bg-blue-50 transition shadow-md whitespace-nowrap">
                     Gestionar Faltas
@@ -91,7 +91,10 @@
             <div class="modal-content py-4 text-left px-6">
                 <!-- Title -->
                 <div class="flex justify-between items-center pb-3 border-b border-slate-100">
-                    <p class="text-2xl font-bold text-slate-800">Mis Faltas</p>
+                    <div>
+                        <p class="text-2xl font-bold text-slate-800">Simulador de Faltas</p>
+                        <p class="text-xs text-slate-400">¿Qué pasa si falto a todo lo que queda?</p>
+                    </div>
                     <div class="cursor-pointer z-50" onclick="toggleModal('modal-faltas')">
                         <i class="fas fa-times text-slate-500 hover:text-red-500 text-xl"></i>
                     </div>
@@ -151,9 +154,6 @@
             5: { "RRPP": 2, "LANZAMIENTO": 2, "SOSTENIBILIDAD": 1 }
         };
 
-        // Mapeo de límites proporcionados por el usuario
-        // Nota: Asignamos "Diseño 28" a DEMC por ser la carga horaria mayor.
-        // Diseño Gráfico se queda sin límite explícito en la lista (null).
         const LIMITS = {
             "DEMC": 28, 
             "MEDIOS": 23,
@@ -161,7 +161,7 @@
             "TRABAJO DE CAMPO": 17,
             "ATENCIÓN AL CLIENTE": 17,
             "LANZAMIENTO": 17,
-            "DISEÑO": null, // Diseño gráfico
+            "DISEÑO": null, 
             "INGLÉS": 11,
             "IPE": 11,
             "SOSTENIBILIDAD": 11
@@ -242,21 +242,39 @@
         function saveAbsence(subject, value) {
             userAbsences[subject] = parseInt(value) || 0;
             localStorage.setItem(STORAGE_KEY, JSON.stringify(userAbsences));
-            renderAbsencesModalList(); // Actualizar colores en tiempo real
+            renderAbsencesModalList(); 
         }
 
-        function getAbsenceStatus(subject, currentAbsences) {
+        function getAbsenceStatus(subject, currentAbsences, remainingFutureHours) {
             const limit = LIMITS[subject];
             if (limit === null || limit === undefined) return { text: "Sin límite definido", color: "text-gray-400", bg: "bg-gray-100" };
 
-            const remaining = limit - currentAbsences;
+            // NUEVA LÓGICA:
+            // Cálculo = Límite - (Faltas Actuales + Todas las horas futuras)
+            // Si es positivo: Puedes faltar a todo lo futuro y sobran X horas.
+            // Si es negativo: No puedes faltar a todo, te pasarías por X horas.
             
-            if (remaining < 0) {
-                return { text: `¡Te has pasado por ${Math.abs(remaining)}h!`, color: "text-red-600", bg: "bg-red-100", icon: "fa-exclamation-triangle" };
-            } else if (remaining <= 5) {
-                return { text: `Cuidado: quedan ${remaining}h`, color: "text-orange-600", bg: "bg-orange-100", icon: "fa-exclamation-circle" };
+            const totalProjectedAbsences = currentAbsences + remainingFutureHours;
+            const difference = limit - totalProjectedAbsences;
+            
+            if (difference >= 0) {
+                // Caso Verde: Puedes faltar a todo
+                return { 
+                    text: `Estás dentro del límite por ${difference}h`, 
+                    color: "text-green-600", 
+                    bg: "bg-green-100", 
+                    icon: "fa-check-circle",
+                    detail: "(Puedes faltar a todo)"
+                };
             } else {
-                return { text: `Te quedan ${remaining}h`, color: "text-green-600", bg: "bg-green-100", icon: "fa-check-circle" };
+                // Caso Rojo: Te pasarías
+                return { 
+                    text: `Estás fuera del límite por ${Math.abs(difference)}h`, 
+                    color: "text-red-600", 
+                    bg: "bg-red-100", 
+                    icon: "fa-times-circle",
+                    detail: "(No puedes faltar a todo)"
+                };
             }
         }
 
@@ -264,31 +282,39 @@
             const list = document.getElementById('absences-list');
             list.innerHTML = '';
             
+            // Necesitamos los totales actuales para calcular el futuro
+            const { totals } = calculateRemainingHours();
             const orderedKeys = Object.keys(SUBJECT_CONFIG);
 
             orderedKeys.forEach(subject => {
                 const current = userAbsences[subject] || 0;
-                const status = getAbsenceStatus(subject, current);
+                const futureHours = totals[subject] || 0;
+                
+                const status = getAbsenceStatus(subject, current, futureHours);
                 const config = SUBJECT_CONFIG[subject];
 
                 const row = document.createElement('div');
-                row.className = "flex items-center justify-between bg-slate-50 p-3 rounded-lg";
+                row.className = "flex flex-col sm:flex-row sm:items-center justify-between bg-slate-50 p-3 rounded-lg";
                 row.innerHTML = `
-                    <div class="flex-1">
+                    <div class="flex-1 mb-2 sm:mb-0">
                         <div class="font-bold text-sm text-slate-700">${config.name}</div>
                         <div class="text-xs ${status.color} font-bold flex items-center mt-1">
                             ${status.icon ? `<i class="fas ${status.icon} mr-1"></i>` : ''}
                             ${status.text}
+                            <span class="ml-1 opacity-75 font-normal text-[10px] hidden sm:inline">${status.detail || ''}</span>
                         </div>
                     </div>
-                    <div class="flex items-center">
-                        <input type="number" min="0" 
-                            class="w-16 p-2 border border-slate-300 rounded text-center font-bold text-slate-700 focus:ring-2 focus:ring-blue-400 focus:outline-none"
-                            value="${current}" 
-                            onchange="saveAbsence('${subject}', this.value)"
-                            onkeyup="saveAbsence('${subject}', this.value)"
-                        >
-                        <span class="ml-2 text-xs text-slate-400 font-bold">hrs</span>
+                    <div class="flex items-center justify-between sm:justify-end w-full sm:w-auto">
+                        <span class="text-[10px] text-slate-400 mr-2">Faltas actuales:</span>
+                        <div class="flex items-center">
+                            <input type="number" min="0" 
+                                class="w-16 p-2 border border-slate-300 rounded text-center font-bold text-slate-700 focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                                value="${current}" 
+                                onchange="saveAbsence('${subject}', this.value)"
+                                onkeyup="saveAbsence('${subject}', this.value)"
+                            >
+                            <span class="ml-2 text-xs text-slate-400 font-bold">hrs</span>
+                        </div>
                     </div>
                 `;
                 list.appendChild(row);
@@ -302,7 +328,7 @@
             if (!document.getElementById(modalID).classList.contains("opacity-0")) {
                 renderAbsencesModalList();
             } else {
-                render(); // Re-render main grid to update any absence indicators if we added them there later
+                render(); 
             }
         }
 
